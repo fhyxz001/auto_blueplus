@@ -207,7 +207,7 @@ if (process.env.SP_DASHBOARD !== '1') {
         headless: false,
         ...proxyOpts,
         // Docker 中以 root 运行 Chromium 需要关闭沙箱；本地行为不受影响
-        ...(process.env.SP_NO_SANDBOX === '1' ? { args: ['--no-sandbox', '--disable-dev-shm-usage'] } : {})
+        ...(process.env.SP_NO_SANDBOX === '1' ? { args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] } : {})
     });
 
     const context = await browser.newContext({

@@ -51,5 +51,5 @@ EXPOSE 3456
 # 显式以 root 运行，确保挂载的 /data 卷可写（SP_NO_SANDBOX=1 已为 Chromium 关闭沙箱）
 USER root
 
-# xvfb-run 提供虚拟显示器供 Chromium 使用，-a 自动分配可用 DISPLAY
-CMD ["xvfb-run", "-a", "node", "server.js"]
+# xvfb-run 提供虚拟显示器供 Chromium 使用；-s 指定分辨率/色深（默认 640x480x8 太小）
+CMD ["xvfb-run", "-a", "-s", "-screen 0 1280x720x24", "node", "server.js"]
