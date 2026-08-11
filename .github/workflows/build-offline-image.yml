@@ -1,27 +1,18 @@
 name: 构建离线 Docker 镜像
 
-# 触发方式：推送/提交到 main 后自动构建；也可在 Actions 页面点「Run workflow」手动触发
 on:
   push:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: '镜像标签'
-        required: false
-        default: 'latest'
 
 permissions:
   contents: read
 
 jobs:
   build-offline-image:
-    name: 构建并导出离线镜像
+    name: 构建并导出可直接导入的离线镜像
     runs-on: ubuntu-latest
-    env:
-      # 手动触发时用输入的标签，推送触发时默认 latest
-      IMAGE_TAG: ${{ inputs.image_tag || 'latest' }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -35,59 +26,67 @@ jobs:
             echo "::warning::Dockerfile 基础镜像 tag 与 playwright ${PW} 不一致，请检查"
           fi
 
-      - name: 构建镜像
-        run: docker build -t southplus_auto:${{ env.IMAGE_TAG }} .
+      - name: 构建镜像（amd64）
+        run: docker build -t southplus_auto:latest .
 
-      - name: 导出为 gzip 压缩的 tar
+      - name: 导出为单个 tar（飞牛 NAS 可直接导入）
         run: |
           mkdir -p out
-          docker save southplus_auto:${{ env.IMAGE_TAG }} | gzip > out/southplus_auto-image.tar.gz
-          du -sh out/southplus_auto-image.tar.gz
+          docker save southplus_auto:latest -o out/southplus_auto.tar
+          du -sh out/southplus_auto.tar
 
-      - name: 按 900MB 分片（便于跨机器传输与上传）
+      - name: 检查体积（GitHub 单个 artifact 上限约 2GB）
         run: |
-          cd out
-          split -b 900M -d -a 2 southplus_auto-image.tar.gz southplus_auto-image.tar.gz.part-
-          rm -f southplus_auto-image.tar.gz
-          ls -lh
+          s=$(stat -c%s out/southplus_auto.tar)
+          echo "体积: out/southplus_auto.tar -> $(du -h out/southplus_auto.tar | cut -f1)"
+          if [ "$s" -gt 1900000000 ]; then
+            echo "::error::镜像超过 1.9GB，接近 GitHub 上传上限，需要精简镜像"
+            exit 1
+          fi
 
-      - name: 生成离线加载说明
+      - name: 生成部署说明
         run: |
-          cat > out/LOAD.md <<'EOF'
-          # 南+ 扫描控制台 - 离线镜像部署说明
+          cat > out/部署说明.md <<'EOF'
+          # 南+ 扫描控制台 — 飞牛 NAS 部署说明
 
-          ## 1. 汇总分片
-          把下载到的所有 `southplus_auto-image.tar.gz.part-*` 放到同一目录，执行：
-            cat southplus_auto-image.tar.gz.part-* > southplus_auto-image.tar.gz
+          ## 1. 导入镜像（二选一）
+          方式 A（图形界面）：飞牛 Docker → 镜像 → 导入镜像 → 上传 southplus_auto.tar
+          方式 B（终端 / SSH）：
+            docker load -i southplus_auto.tar
 
-          ## 2. 导入镜像（docker load 支持 gzip）
-            docker load -i southplus_auto-image.tar.gz
+          导入后在镜像列表应能看到 southplus_auto:latest。
 
-          ## 3. 准备数据目录（放入 auth.json）
-            mkdir -p /opt/southplus/data
-            cp auth.json /opt/southplus/data/
+          ## 2. 准备数据目录
+          创建目录（例如 /vol1/1000/docker/southplus/data），把 auth.json 放进去。
 
-          ## 4. 启动容器
-            docker run -d --name southplus_auto \
-              --restart unless-stopped --init \
-              -p 3456:3456 \
-              -v /opt/southplus/data:/data \
-              -e SP_DATA_DIR=/data \
-              southplus_auto:${{ env.IMAGE_TAG }}
+          ## 3. 用 Compose 启动（飞牛 Docker → 项目 → 新建项目）
+          粘贴以下内容（把 volume 路径换成你的实际路径）：
+          ```yaml
+          services:
+            southplus:
+              image: southplus_auto:latest
+              container_name: southplus_auto
+              restart: unless-stopped
+              init: true
+              ports:
+                - "3456:3456"
+              volumes:
+                - /vol1/1000/docker/southplus/data:/data
+              environment:
+                - SP_DATA_DIR=/data
+                # 访问 blue-plus.net 需要代理时取消注释：
+                # - SP_PROXY=http://<NAS网关IP>:7890
+                # - SP_PROXY_BYPASS=localhost,127.0.0.1
+              shm_size: 2gb
+          ```
 
-          需要代理访问 blue-plus.net 时，在 docker run 命令中追加：
-            -e SP_PROXY=http://host.docker.internal:7890 \
-            -e SP_PROXY_BYPASS=localhost,127.0.0.1 \
-          （代理需认证时再加 -e SP_PROXY_USERNAME=xx -e SP_PROXY_PASSWORD=xx）
+          ## 4. 访问控制台
+          浏览器打开 http://<NAS的IP>:3456
 
-          ## 5. 访问控制台
-            http://localhost:3456
-
-          提示：若使用 docker-compose，删掉 docker-compose.yml 里的 `build:` 段、
-          直接写 `image: southplus_auto:latest` 并保留 volumes 挂载即可。
+          提示：控制面板没有登录鉴权，请勿把 3456 端口直接暴露到公网。
           EOF
 
-      - name: 上传构建产物
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: southplus_auto-offline-image
