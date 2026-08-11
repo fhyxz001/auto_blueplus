@@ -1,7 +1,10 @@
 name: 构建离线 Docker 镜像
 
-# 手动触发：GitHub Actions 页面点「Run workflow」按钮
+# 触发方式：推送/提交到 main 后自动构建；也可在 Actions 页面点「Run workflow」手动触发
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       image_tag:
@@ -16,6 +19,9 @@ jobs:
   build-offline-image:
     name: 构建并导出离线镜像
     runs-on: ubuntu-latest
+    env:
+      # 手动触发时用输入的标签，推送触发时默认 latest
+      IMAGE_TAG: ${{ inputs.image_tag || 'latest' }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -30,12 +36,12 @@ jobs:
           fi
 
       - name: 构建镜像
-        run: docker build -t southplus_auto:${{ inputs.image_tag }} .
+        run: docker build -t southplus_auto:${{ env.IMAGE_TAG }} .
 
       - name: 导出为 gzip 压缩的 tar
         run: |
           mkdir -p out
-          docker save southplus_auto:${{ inputs.image_tag }} | gzip > out/southplus_auto-image.tar.gz
+          docker save southplus_auto:${{ env.IMAGE_TAG }} | gzip > out/southplus_auto-image.tar.gz
           du -sh out/southplus_auto-image.tar.gz
 
       - name: 按 900MB 分片（便于跨机器传输与上传）
@@ -67,7 +73,7 @@ jobs:
               -p 3456:3456 \
               -v /opt/southplus/data:/data \
               -e SP_DATA_DIR=/data \
-              southplus_auto:${{ inputs.image_tag }}
+              southplus_auto:${{ env.IMAGE_TAG }}
 
           ## 5. 访问控制台
             http://localhost:3456
