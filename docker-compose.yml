@@ -1,0 +1,16 @@
+services:
+  southplus:
+    build: .
+    image: southplus_auto:latest
+    container_name: southplus_auto
+    restart: unless-stopped
+    init: true
+    ports:
+      - "3456:3456"
+    volumes:
+      # 数据持久化：先把 auth.json 放到 ./data/ 下，扫描结果/缓存/定时配置也存这里
+      - ./data:/data
+    environment:
+      - SP_DATA_DIR=/data
+    # Chromium 在容器内 /dev/shm 过小会崩溃，扩大共享内存
+    shm_size: 2gb

@@ -1,0 +1,24 @@
+{
+  "name": "southplus_auto",
+  "version": "1.0.0",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "dev": "concurrently -k \"node server.js\" \"vite\"",
+    "dev:server": "node server.js",
+    "dev:client": "vite",
+    "build": "vite build",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "playwright": "^1.62.1"
+  },
+  "devDependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "concurrently": "^10.0.4",
+    "element-plus": "^2.14.4",
+    "vite": "^8.2.1",
+    "vue": "^3.5.41"
+  }
+}
