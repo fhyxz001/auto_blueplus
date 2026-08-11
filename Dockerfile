@@ -27,9 +27,9 @@ ENV SP_NO_SANDBOX=1
 ENV PORT=3456
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Chromium 所需基础库 + Xvfb（headed 模式的虚拟显示器）
+# Chromium 所需基础库 + Xvfb（headed 模式的虚拟显示器，xvfb-run 需要 xauth）
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends xvfb ca-certificates fonts-liberation \
+    && apt-get install -y --no-install-recommends xvfb xauth ca-certificates fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装运行时依赖，并只下载 Chromium 及其系统依赖
