@@ -12,10 +12,12 @@ COPY src ./src
 RUN npm run build
 
 # =========================================================
-# Stage 2: 运行时（Node 后端 + Playwright + 构建产物）
+# Stage 2: 运行时（Node 后端 + Playwright/Chromium + 构建产物）
 # =========================================================
-# 使用与 package.json 中 playwright 版本匹配的官方镜像（自带 Chromium 及其系统依赖）
-FROM mcr.microsoft.com/playwright:v1.62.1-jammy
+# 不用 playwright 官方镜像：它打包了 firefox/webkit 等全套浏览器，
+# docker save 达 2.3GB，超过 GitHub 上传上限。改为 node:slim + 只装
+# Chromium，镜像约 700MB。
+FROM node:24-slim
 
 WORKDIR /app
 
@@ -23,15 +25,18 @@ ENV NODE_ENV=production
 ENV SP_DATA_DIR=/data
 ENV SP_NO_SANDBOX=1
 ENV PORT=3456
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# southplus.js 以 headless:false 启动 Chromium，容器内需 Xvfb 提供虚拟显示器
+# Chromium 所需基础库 + Xvfb（headed 模式的虚拟显示器）
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends xvfb \
+    && apt-get install -y --no-install-recommends xvfb ca-certificates fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
-# 仅安装运行时依赖（playwright；浏览器由镜像自带，无需 playwright install）
+# 安装运行时依赖，并只下载 Chromium 及其系统依赖
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev \
+    && npx playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
 
 # 前端构建产物 + 服务端代码
 COPY --from=build /app/dist ./dist

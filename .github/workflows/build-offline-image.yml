@@ -17,15 +17,6 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 校验 Playwright 版本与 Dockerfile 基础镜像一致
-        run: |
-          PW=$(node -p "require('./package.json').dependencies.playwright.replace('^','')")
-          if grep -q "FROM mcr.microsoft.com/playwright:v${PW}" Dockerfile; then
-            echo "OK: Dockerfile 基础镜像与 playwright ${PW} 一致"
-          else
-            echo "::warning::Dockerfile 基础镜像 tag 与 playwright ${PW} 不一致，请检查"
-          fi
-
       - name: 构建镜像（amd64）
         run: docker build -t southplus_auto:latest .
 
