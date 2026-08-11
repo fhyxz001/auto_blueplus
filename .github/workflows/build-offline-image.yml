@@ -75,6 +75,11 @@ jobs:
               -e SP_DATA_DIR=/data \
               southplus_auto:${{ env.IMAGE_TAG }}
 
+          需要代理访问 blue-plus.net 时，在 docker run 命令中追加：
+            -e SP_PROXY=http://host.docker.internal:7890 \
+            -e SP_PROXY_BYPASS=localhost,127.0.0.1 \
+          （代理需认证时再加 -e SP_PROXY_USERNAME=xx -e SP_PROXY_PASSWORD=xx）
+
           ## 5. 访问控制台
             http://localhost:3456
 

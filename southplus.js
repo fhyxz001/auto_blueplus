@@ -191,8 +191,21 @@ if (process.env.SP_DASHBOARD !== '1') {
 }
 
 (async () => {
+    // 代理配置：SP_PROXY 形如 http://host:port 或 socks5://host:port，
+    // 未设置则不走代理。可用 SP_PROXY_BYPASS 指定直连白名单，SP_PROXY_USERNAME/PASSWORD 提供认证。
+    const proxyOpts = (() => {
+        const server = process.env.SP_PROXY;
+        if (!server) return {};
+        const p = { server };
+        if (process.env.SP_PROXY_BYPASS) p.bypass = process.env.SP_PROXY_BYPASS;
+        if (process.env.SP_PROXY_USERNAME) p.username = process.env.SP_PROXY_USERNAME;
+        if (process.env.SP_PROXY_PASSWORD) p.password = process.env.SP_PROXY_PASSWORD;
+        return { proxy: p };
+    })();
+
     const browser = await chromium.launch({
         headless: false,
+        ...proxyOpts,
         // Docker 中以 root 运行 Chromium 需要关闭沙箱；本地行为不受影响
         ...(process.env.SP_NO_SANDBOX === '1' ? { args: ['--no-sandbox', '--disable-dev-shm-usage'] } : {})
     });

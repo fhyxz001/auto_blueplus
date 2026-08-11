@@ -12,5 +12,17 @@ services:
       - ./data:/data
     environment:
       - SP_DATA_DIR=/data
+      # ── 代理配置（可选）────────────────────────────────────────
+      # 访问 blue-plus.net 需要代理时，取消注释并填写。
+      # host.docker.internal 指向宿主机（Docker Desktop 可用；
+      # Linux 部署请换成宿主机实际 IP，或用 --network=host）。
+      - SP_PROXY=${SP_PROXY:-}
+      - SP_PROXY_BYPASS=${SP_PROXY_BYPASS:-localhost,127.0.0.1}
+      - SP_PROXY_USERNAME=${SP_PROXY_USERNAME:-}
+      - SP_PROXY_PASSWORD=${SP_PROXY_PASSWORD:-}
+      # 更简单的写法（二选一即可，Chromium 也会读取标准代理变量）：
+      # - HTTP_PROXY=http://host.docker.internal:7890
+      # - HTTPS_PROXY=http://host.docker.internal:7890
+      # - NO_PROXY=localhost,127.0.0.1
     # Chromium 在容器内 /dev/shm 过小会崩溃，扩大共享内存
     shm_size: 2gb
