@@ -124,7 +124,9 @@ function launchScan(maxPage, textThreshold, note) {
         SP_DASHBOARD: '1'
     };
 
-    scanProcess = spawn('node', ['southplus.js'], { cwd: DATA_DIR, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    // southplus.js 与 server.js 同目录（Docker 中在 /app），
+    // 用绝对路径传给 node；cwd 仍为数据目录，保证脚本内 process.cwd() 指向挂载卷
+    scanProcess = spawn('node', [path.join(__dirname, 'southplus.js')], { cwd: DATA_DIR, env, stdio: ['ignore', 'pipe', 'pipe'] });
 
     scanProcess.stdout.on('data', (data) => {
         const lines = data.toString().split('\n').filter(l => l.trim());
