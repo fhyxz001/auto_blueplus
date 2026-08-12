@@ -1,0 +1,16 @@
+{
+  "description": "南+帖子分析结果",
+  "scannedAt": "2026-08-12T04:37:38.040Z",
+  "totalPages": 1,
+  "summary": {
+    "longTextCount": 0,
+    "paywallCount": 0,
+    "gofileCount": 0,
+    "skippedByCache": 0,
+    "newlyScanned": 0,
+    "cachedTotal": 0
+  },
+  "longTextPosts": [],
+  "paywallPosts": [],
+  "gofilePosts": []
+}

@@ -4,7 +4,7 @@
   "private": true,
   "main": "southplus.js",
   "scripts": {
-    "start": "node southplus.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "playwright": "^1.62.1"

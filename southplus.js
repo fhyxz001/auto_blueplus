@@ -1,6 +1,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const { loadSettings } = require('./settings');
 
 // =========================================================
 // 已扫描缓存管理
@@ -21,10 +22,42 @@ function loadScannedCache() {
 
 function saveScannedCache(cache) {
     fs.writeFileSync(SCANNED_CACHE_FILE, JSON.stringify({
-        description: '已扫描过的帖子tid列表（不符合标准的帖子），下次运行时会自动跳过',
+        description: '已扫描过的帖子tid列表（所有已分析过的帖子），下次运行时会自动跳过',
         count: cache.size,
         tids: Array.from(cache).sort((a, b) => Number(a) - Number(b))
     }, null, 2), 'utf8');
+}
+
+// =========================================================
+// 历史扫描记录存档：每次扫描结果写入 history/ 目录，保留最近 N 条
+// =========================================================
+const HISTORY_DIR = path.join(process.cwd(), 'history');
+const HISTORY_KEEP = 100;
+
+function scanTimestampString(d) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+function saveHistory(data) {
+    try {
+        fs.mkdirSync(HISTORY_DIR, { recursive: true });
+        const file = `scan_${scanTimestampString(new Date())}.json`;
+        fs.writeFileSync(path.join(HISTORY_DIR, file), JSON.stringify(data, null, 2), 'utf8');
+
+        // 只保留最近 HISTORY_KEEP 条，避免无限增长
+        const files = fs.readdirSync(HISTORY_DIR)
+            .filter((f) => /^scan_.*\.json$/.test(f))
+            .sort();
+        while (files.length > HISTORY_KEEP) {
+            const oldest = files.shift();
+            try { fs.unlinkSync(path.join(HISTORY_DIR, oldest)); } catch (e) {}
+        }
+        return file;
+    } catch (e) {
+        console.error('⚠️ 保存历史记录失败:', e.message);
+        return null;
+    }
 }
 
 // =========================================================
@@ -176,15 +209,16 @@ async function tryZeroSpPurchase(page) {
 }
 
 async function runScan() {
-    // 代理配置：SP_PROXY 形如 http://host:port 或 socks5://host:port，
-    // 未设置则不走代理。可用 SP_PROXY_BYPASS 指定直连白名单，SP_PROXY_USERNAME/PASSWORD 提供认证。
+    // 每次扫描重新读取设置（settings.json + 环境变量覆盖），改设置无需重启
+    const settings = loadSettings();
+
+    // 代理配置：settings.proxyServer 形如 http://host:port 或 socks5://host:port，
+    // 未设置则不走代理。
     const proxyOpts = (() => {
-        const server = process.env.SP_PROXY;
-        if (!server) return {};
-        const p = { server };
-        if (process.env.SP_PROXY_BYPASS) p.bypass = process.env.SP_PROXY_BYPASS;
-        if (process.env.SP_PROXY_USERNAME) p.username = process.env.SP_PROXY_USERNAME;
-        if (process.env.SP_PROXY_PASSWORD) p.password = process.env.SP_PROXY_PASSWORD;
+        if (!settings.proxyServer) return {};
+        const p = { server: settings.proxyServer };
+        if (settings.proxyUsername) p.username = settings.proxyUsername;
+        if (settings.proxyPassword) p.password = settings.proxyPassword;
         return { proxy: p };
     })();
 
@@ -224,8 +258,8 @@ async function runScan() {
     // =========================================================
     // 配置
     // =========================================================
-    const MAX_PAGE = parseInt(process.env.SP_MAX_PAGE) || 2;
-    const LONG_TEXT_THRESHOLD = parseInt(process.env.SP_TEXT_THRESHOLD) || 300; // 大于300字算长文帖
+    const MAX_PAGE = settings.maxPage;
+    const LONG_TEXT_THRESHOLD = settings.textThreshold; // 大于该字数算长文帖
     const baseUrl = 'https://blue-plus.net/';
     const pageUrl = (pageNum) =>
         `https://blue-plus.net/thread.php?fid-9-search-1-orderway-postdate-asc-DESC-page-${pageNum}.html`;
@@ -235,7 +269,7 @@ async function runScan() {
     const paywallPosts = [];     // 付费帖（有购买组件）
     const gofilePosts = [];      // 主楼含 gofile 链接的帖子
 
-    // 已扫描缓存（不符合标准的帖子tid）
+    // 已扫描缓存（所有已分析过的帖子tid，下次跳过）
     const scannedCache = loadScannedCache();
     console.log(`📋 已扫描缓存: ${scannedCache.size} 条记录`);
     let skippedCount = 0;
@@ -336,9 +370,9 @@ async function runScan() {
                 console.log(`   TID: ${thread.tid}`);
 
                 try {
-                    // 检查缓存：已扫描过且不符合标准的帖子跳过
+                    // 检查缓存：已扫描过的帖子跳过
                     if (thread.tid && scannedCache.has(thread.tid)) {
-                        console.log(`   ⏭️ 缓存记录：该帖子已扫描过（不符合标准），跳过`);
+                        console.log(`   ⏭️ 缓存记录：该帖子已扫描过，跳过`);
                         skippedCount++;
                         continue;
                     }
@@ -430,11 +464,11 @@ async function runScan() {
                         });
                     }
 
-                    // 不符合任何标准的帖子，记录tid到缓存，下次跳过
-                    if (!isWorthy && thread.tid) {
+                    // 所有成功分析的帖子都记录 tid 到缓存，下次跳过（避免重复扫描）
+                    if (thread.tid) {
                         scannedCache.add(thread.tid);
                         newScannedCount++;
-                        console.log(`   📝 不符合标准，已加入扫描缓存 (tid=${thread.tid})`);
+                        console.log(`   💾 已加入扫描缓存 (tid=${thread.tid})`);
                     }
 
                     const tagStr = tags.length > 0 ? ` [${tags.join(' | ')}]` : '';
@@ -472,6 +506,12 @@ async function runScan() {
 
         fs.writeFileSync(outputPath, JSON.stringify(output, null, 2), 'utf8');
 
+        // 存档历史扫描记录
+        const historyFile = saveHistory(output);
+        if (historyFile) {
+            console.log(`🗂️ 历史记录已存档: ${path.join(HISTORY_DIR, historyFile)}`);
+        }
+
         // 保存扫描缓存
         saveScannedCache(scannedCache);
 
@@ -480,7 +520,7 @@ async function runScan() {
         console.log(`📊 长文帖 (>${LONG_TEXT_THRESHOLD}字): ${longTextPosts.length} 篇`);
         console.log(`📊 付费帖: ${paywallPosts.length} 篇`);
         console.log(`📊 含gofile链接帖: ${gofilePosts.length} 篇`);
-        console.log(`⏭️ 缓存跳过（不符合标准）: ${skippedCount} 篇`);
+        console.log(`⏭️ 缓存跳过（已扫描过）: ${skippedCount} 篇`);
         console.log(`📝 本次新增扫描缓存: ${newScannedCount} 条`);
         console.log(`📋 扫描缓存总数: ${scannedCache.size} 条`);
         console.log(`📁 结果已保存到: ${outputPath}`);
@@ -495,35 +535,71 @@ async function runScan() {
 }
 
 // =========================================================
-// 定时任务调度：每次扫描结束后，间隔 SCAN_INTERVAL_MS 再跑一次
-// 可通过环境变量 SP_INTERVAL_MS 自定义间隔（毫秒），默认 1 小时
+// 手动触发扫描：检测触发文件是否存在，存在则立即开始新一轮
 // =========================================================
-const SCAN_INTERVAL_MS = parseInt(process.env.SP_INTERVAL_MS) || 60 * 60 * 1000;
+const TRIGGER_FILE = path.join(process.cwd(), 'scan_trigger.json');
 
-(async () => {
-    console.log(`🕐 定时扫描已开启：每次扫描结束后，默认间隔 ${SCAN_INTERVAL_MS / 60000} 分钟再次扫描`);
-    console.log(`   如需调整间隔，设置环境变量 SP_INTERVAL_MS（单位毫秒），例如 SP_INTERVAL_MS=1800000 表示每 30 分钟`);
-
-    let isFirstRun = true;
-    for (;;) {
-        if (!isFirstRun) {
-            console.log('\n================================');
-            console.log('🕐 定时任务触发：开始新一轮扫描');
-            console.log('================================');
+function consumeTrigger() {
+    try {
+        if (fs.existsSync(TRIGGER_FILE)) {
+            fs.unlinkSync(TRIGGER_FILE);
+            return true;
         }
-        isFirstRun = false;
+    } catch (e) {
+        console.error('⚠️ 读取触发文件失败:', e.message);
+    }
+    return false;
+}
 
+// =========================================================
+// 调度：启动后不自动扫描，等待网页手动触发。首次触发后立即扫描一次，
+// 并同时开启定时扫描（每 settings.scanIntervalMinutes 分钟自动一次）。
+// 定时扫描期间仍可手动触发，手动触发会立即开始并重置定时。
+// =========================================================
+(async () => {
+    console.log('⏳ 扫描器已就绪：等待网页手动触发，触发后开启定时扫描');
+    console.log(`   可在网页 http://localhost:${process.env.PORT || 4567} 点击"立即扫描"按钮开始一轮扫描`);
+
+    let timerEnabled = false; // 是否已开启定时扫描
+    let nextTimerAt = 0;      // 下一次定时扫描的到期时间
+
+    async function doScan(reason) {
+        console.log('\n================================');
+        console.log(reason);
+        console.log('================================');
         const startedAt = Date.now();
         try {
             await runScan();
         } catch (e) {
             console.error('❌ 扫描过程异常:', e.message);
         }
-
         const elapsedMin = ((Date.now() - startedAt) / 60000).toFixed(1);
-        const nextTime = new Date(Date.now() + SCAN_INTERVAL_MS).toLocaleString();
-        console.log(`⏱️ 本次扫描耗时 ${elapsedMin} 分钟，将在 ${SCAN_INTERVAL_MS / 60000} 分钟后（${nextTime}）进行下一次扫描。`);
+        console.log(`⏱️ 本次扫描耗时 ${elapsedMin} 分钟`);
+        if (timerEnabled) {
+            const settings = loadSettings();
+            const intervalMs = settings.scanIntervalMinutes * 60000;
+            nextTimerAt = Date.now() + intervalMs;
+            console.log(`🕐 定时扫描已开启：每 ${settings.scanIntervalMinutes} 分钟自动扫描一次，下次 ${new Date(nextTimerAt).toLocaleString()}`);
+        }
+    }
 
-        await new Promise(resolve => setTimeout(resolve, SCAN_INTERVAL_MS));
+    for (;;) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 手动触发优先
+        if (consumeTrigger()) {
+            if (!timerEnabled) {
+                timerEnabled = true;
+                const settings = loadSettings();
+                console.log(`🕐 已开启定时扫描：每 ${settings.scanIntervalMinutes} 分钟自动扫描一次`);
+            }
+            await doScan('🖱️ 收到手动触发：开始扫描');
+            continue;
+        }
+
+        // 定时到期
+        if (timerEnabled && Date.now() >= nextTimerAt) {
+            await doScan('🕐 定时任务触发：开始自动扫描');
+        }
     }
 })();

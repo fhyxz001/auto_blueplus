@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>南+ 扫描控制台</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb;
+    --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
+    --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a;
+    --good: #0ca30c; --warn: #d98a00; --serious: #ec835a;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb;
+    --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
+    --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a;
+    --good: #0ca30c; --warn: #d98a00; --serious: #ec835a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19;
+      --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+      --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70;
+      --good: #0ca30c; --warn: #c98500; --serious: #ec835a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+    --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70;
+    --good: #0ca30c; --warn: #c98500; --serious: #ec835a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 32px 20px 64px; }
+
+  header.top {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 28px;
+  }
+  header.top h1 { font-size: 20px; margin: 0 0 4px; font-weight: 650; }
+  header.top .meta { color: var(--ink-2); font-size: 13px; }
+  header.top .meta .hist select {
+    font: inherit; font-size: 13px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--grid);
+    border-radius: 6px; padding: 3px 8px; margin-left: 4px; max-width: 320px;
+    outline: none;
+  }
+  header.top .meta .hist select:focus { border-color: var(--cat-1); }
+  .actions { display: flex; gap: 8px; }
+  button {
+    font: inherit; color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--axis);
+    border-radius: 8px; padding: 6px 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--ink-3); }
+  button.primary { background: var(--cat-1); color: #fff; border-color: var(--cat-1); }
+  button.primary:hover { opacity: .88; }
+
+  /* 设置卡片 */
+  .card-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 28px;
+  }
+  .card-section h2 { font-size: 16px; font-weight: 650; margin: 0 0 14px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+  .form-grid label {
+    font-size: 13px; color: var(--ink-2); display: flex; flex-direction: column; gap: 4px;
+  }
+  .form-grid input, .form-grid select {
+    font: inherit; font-size: 14px; color: var(--ink);
+    background: var(--page); border: 1px solid var(--grid);
+    border-radius: 6px; padding: 6px 10px; outline: none;
+  }
+  .form-grid input:focus { border-color: var(--cat-1); }
+  .form-actions { margin-top: 14px; display: flex; align-items: center; gap: 14px; }
+  .hint { font-size: 13px; }
+  .hint.ok { color: var(--good); }
+  .hint.err { color: var(--serious); }
+
+  /* 结果 */
+  section.table-section { margin-bottom: 32px; }
+  section.table-section > h2 {
+    font-size: 16px; font-weight: 650; margin: 0 0 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  section.table-section > h2 .dot { width: 10px; height: 10px; border-radius: 3px; }
+  section.table-section > h2 .count {
+    color: var(--ink-3); font-weight: 500; font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .export-btn {
+    margin-left: auto; font-size: 12px; padding: 3px 10px;
+    border-radius: 6px; white-space: nowrap;
+  }
+  .export-btn:hover { border-color: var(--cat-1); color: var(--cat-1); }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; min-width: 560px; }
+  thead th {
+    text-align: left; font-weight: 550; color: var(--ink-2); font-size: 12px;
+    padding: 10px 14px; border-bottom: 1px solid var(--axis);
+    white-space: nowrap; background: var(--surface);
+  }
+  tbody td { padding: 9px 14px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: rgba(0,0,0,.03); }
+  :root[data-theme="dark"] tbody tr:hover td, :root:not([data-theme="light"]) tbody tr:hover td { background: rgba(255,255,255,.05); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .title { max-width: 380px; }
+  .title a { color: var(--ink); text-decoration: none; }
+  .title a:hover { text-decoration: underline; }
+  .tid { color: var(--ink-3); font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
+  .status { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .status .sdot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .st-good .sdot { background: var(--good); }
+  .st-warn .sdot { background: var(--warn); }
+  .st-serious .sdot { background: var(--serious); }
+  .st-none .sdot { background: var(--ink-3); }
+  .chip {
+    display: inline-block; font-size: 12px; color: var(--ink-2);
+    background: var(--page); border: 1px solid var(--grid);
+    border-radius: 999px; padding: 1px 9px; margin: 1px 4px 1px 0;
+    white-space: nowrap; max-width: 240px; overflow: hidden;
+    text-overflow: ellipsis; vertical-align: middle;
+  }
+  .chip a { color: inherit; text-decoration: none; }
+  .chip a:hover { text-decoration: underline; }
+  .empty { color: var(--ink-3); padding: 16px 14px; }
+  [v-cloak] { display: none; }
+</style>
+</head>
+<body>
+<div id="app" v-cloak>
+  <div class="wrap">
+    <header class="top">
+      <div>
+        <h1>南+ 扫描控制台</h1>
+        <div class="meta">
+          <span>{{ scanTimeText }}</span>
+          <span v-if="data.merged"> · 已合并 {{ data.mergedFiles }} 次扫描</span>
+          <span v-if="data.summary"> · 长文 {{ data.summary.longTextCount }} 付费 {{ data.summary.paywallCount }} gofile {{ data.summary.gofileCount }}</span>
+          <span v-if="data.summary && 'skippedByCache' in data.summary"> · 缓存跳过 {{ data.summary.skippedByCache }} 新增 {{ data.summary.newlyScanned }}</span>
+          <span v-if="historyList.length" class="hist">
+            <select v-model="activeFile" @change="onHistoryChange">
+              <option value="merged">全部历史合并</option>
+              <option value="latest">最新扫描</option>
+              <option v-for="h in historyList" :key="h.file" :value="h.file">{{ historyLabel(h) }}</option>
+            </select>
+          </span>
+        </div>
+      </div>
+      <div class="actions">
+        <button @click="toggleTheme">主题：{{ themeLabel }}</button>
+        <button class="primary" @click="triggerScan" :disabled="scanBusy">{{ scanBusy ? '已请求扫描…' : '立即扫描' }}</button>
+        <button @click="onHistoryChange">重新加载</button>
+      </div>
+    </header>
+
+    <!-- 设置 -->
+    <section class="card-section">
+      <h2>扫描设置</h2>
+      <div class="form-grid">
+        <label>扫描间隔（分钟）— 手动触发后开启定时
+          <input type="number" v-model.number="settingsForm.scanIntervalMinutes" min="1">
+        </label>
+        <label>采集页数
+          <input type="number" v-model.number="settingsForm.maxPage" min="1">
+        </label>
+        <label>长文阈值（字）
+          <input type="number" v-model.number="settingsForm.textThreshold" min="1">
+        </label>
+        <label>代理 Server（可留空）
+          <input type="text" v-model="settingsForm.proxyServer" placeholder="http://host:port">
+        </label>
+        <label>代理用户名（可留空）
+          <input type="text" v-model="settingsForm.proxyUsername">
+        </label>
+        <label>代理密码（可留空）
+          <input type="password" v-model="settingsForm.proxyPassword">
+        </label>
+      </div>
+      <div class="form-actions">
+        <button class="primary" @click="saveSettings">保存设置</button>
+        <span class="hint" :class="saveState" v-if="saveMsg">{{ saveMsg }}</span>
+      </div>
+    </section>
+
+    <!-- 结果显示 -->
+    <section class="table-section">
+      <h2><span class="dot" style="background:var(--cat-1)"></span>长文帖 <span class="count" id="cnt-long">({{ longPosts.length }})</span>
+        <button class="export-btn" @click="exportCsv('long')">导出 CSV</button>
+        <button class="export-btn" @click="exportHtml('long')">导出 HTML</button>
+      </h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>标题</th><th class="num">TID</th><th class="num">页</th><th class="num">字数</th><th>付费状态</th></tr></thead>
+          <tbody>
+            <tr v-for="p in longPosts" :key="p.tid">
+              <td class="title"><a :href="p.url" target="_blank" rel="noopener">{{ p.title }}</a></td>
+              <td class="num"><span class="tid">{{ p.tid }}</span></td>
+              <td class="num">{{ p.page }}</td>
+              <td class="num">{{ p.charCount }}</td>
+              <td><span class="status" :class="statusClass(p.paywallStatus)"><span class="sdot"></span>{{ statusLabel(p.paywallStatus) }}</span></td>
+            </tr>
+            <tr v-if="!longPosts.length"><td colspan="5" class="empty">暂无长文帖</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="table-section">
+      <h2><span class="dot" style="background:var(--cat-2)"></span>付费帖 <span class="count">({{ paywallPosts.length }})</span>
+        <button class="export-btn" @click="exportCsv('paywall')">导出 CSV</button>
+        <button class="export-btn" @click="exportHtml('paywall')">导出 HTML</button>
+      </h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>标题</th><th class="num">TID</th><th class="num">页</th><th class="num">售价</th><th>付费状态</th><th class="num">字数</th></tr></thead>
+          <tbody>
+            <tr v-for="p in paywallPosts" :key="p.tid">
+              <td class="title"><a :href="p.url" target="_blank" rel="noopener">{{ p.title }}</a></td>
+              <td class="num"><span class="tid">{{ p.tid }}</span></td>
+              <td class="num">{{ p.page }}</td>
+              <td class="num">{{ priceText(p.price) }}</td>
+              <td><span class="status" :class="statusClass(p.paywallStatus)"><span class="sdot"></span>{{ statusLabel(p.paywallStatus) }}</span></td>
+              <td class="num">{{ p.charCount }}</td>
+            </tr>
+            <tr v-if="!paywallPosts.length"><td colspan="6" class="empty">暂无付费帖</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="table-section">
+      <h2><span class="dot" style="background:var(--cat-3)"></span>含 gofile 链接帖 <span class="count">({{ gofilePosts.length }})</span>
+        <button class="export-btn" @click="exportCsv('gofile')">导出 CSV</button>
+        <button class="export-btn" @click="exportHtml('gofile')">导出 HTML</button>
+      </h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>标题</th><th class="num">TID</th><th class="num">页</th><th>gofile 链接</th><th>付费状态</th></tr></thead>
+          <tbody>
+            <tr v-for="p in gofilePosts" :key="p.tid">
+              <td class="title"><a :href="p.url" target="_blank" rel="noopener">{{ p.title }}</a></td>
+              <td class="num"><span class="tid">{{ p.tid }}</span></td>
+              <td class="num">{{ p.page }}</td>
+              <td>
+                <span class="chip" v-for="(u, idx) in (p.gofileLinks||[]).slice(0,3)" :key="idx">
+                  <a :href="u" target="_blank" rel="noopener">{{ stripScheme(u) }}</a>
+                </span>
+                <span class="chip" v-if="p.gofileLinks && p.gofileLinks.length > 3">+{{ p.gofileLinks.length - 3 }}</span>
+                <span class="tid" v-if="!p.gofileLinks || !p.gofileLinks.length">—</span>
+              </td>
+              <td><span class="status" :class="statusClass(p.paywallStatus)"><span class="sdot"></span>{{ statusLabel(p.paywallStatus) }}</span></td>
+            </tr>
+            <tr v-if="!gofilePosts.length"><td colspan="5" class="empty">暂无含 gofile 链接的帖子</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="./vue.global.prod.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const THEMES = ['system', 'light', 'dark'];
+  const THEME_LABEL = { system: '自动', light: '浅色', dark: '深色' };
+  const STATUS = {
+    free_purchased: '已免费领取',
+    paid_only:      '仅付费',
+    paid:           '付费未购',
+    none:           '无'
+  };
+  const STATUS_CLASS = {
+    free_purchased: 'st-good',
+    paid_only:      'st-warn',
+    paid:           'st-serious',
+    none:           'st-none'
+  };
+
+  Vue.createApp({
+    data() {
+      return {
+        data: {},
+        settingsForm: {
+          scanIntervalMinutes: 60,
+          maxPage: 2,
+          textThreshold: 300,
+          proxyServer: '',
+          proxyUsername: '',
+          proxyPassword: ''
+        },
+        saveMsg: '',
+        saveState: 'ok',
+        scanBusy: false,
+        historyList: [],
+        activeFile: 'merged',
+        themeIdx: 0
+      };
+    },
+
+    computed: {
+      longPosts() {
+        return this.data.longTextPosts || [];
+      },
+      paywallPosts() {
+        return this.data.paywallPosts || [];
+      },
+      gofilePosts() {
+        return this.data.gofilePosts || [];
+      },
+      scanTimeText() {
+        if (!this.data.scannedAt) return '还没有扫描结果';
+        const d = new Date(this.data.scannedAt);
+        return '扫描时间：' + d.toLocaleString('zh-CN', { hour12: false });
+      },
+      themeLabel() {
+        return THEME_LABEL[THEMES[this.themeIdx]];
+      }
+    },
+
+    methods: {
+      // 主题
+      applyTheme() {
+        const t = THEMES[this.themeIdx];
+        const root = document.documentElement;
+        if (t === 'system') root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', t);
+      },
+      toggleTheme() {
+        this.themeIdx = (this.themeIdx + 1) % THEMES.length;
+        localStorage.setItem('sp-theme', THEMES[this.themeIdx]);
+        this.applyTheme();
+      },
+
+      // 数据
+      async loadData() {
+        try {
+          const res = await fetch('/api/data');
+          if (res.status === 404) { this.data = {}; return; }
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          this.data = await res.json();
+        } catch (e) {
+          console.error('加载数据失败:', e);
+          this.data = {};
+        }
+      },
+
+      // 手动触发扫描
+      async triggerScan() {
+        if (this.scanBusy) return;
+        this.scanBusy = true;
+        try {
+          const res = await fetch('/api/scan', { method: 'POST' });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const j = await res.json();
+          alert(j.message || '已请求');
+        } catch (e) {
+          alert('触发失败: ' + e.message);
+        }
+        this.scanBusy = false;
+      },
+
+      // 合并后的完整数据
+      async loadMerged() {
+        try {
+          const res = await fetch('/api/merged');
+          if (res.status === 404) { this.loadData(); return; }
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          this.data = await res.json();
+        } catch (e) {
+          console.error('加载合并数据失败:', e);
+        }
+      },
+
+      // 历史记录
+      async loadHistory() {
+        try {
+          const res = await fetch('/api/history');
+          if (!res.ok) return;
+          this.historyList = await res.json();
+        } catch (e) {
+          console.error('加载历史记录失败:', e);
+        }
+      },
+      onHistoryChange() {
+        if (this.activeFile === 'merged') {
+          this.loadMerged();
+        } else if (this.activeFile === 'latest') {
+          this.loadData();
+        } else {
+          this.loadHistoryFile(this.activeFile);
+        }
+      },
+      async loadHistoryFile(file) {
+        try {
+          const res = await fetch('/api/history?file=' + encodeURIComponent(file));
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          this.data = await res.json();
+        } catch (e) {
+          console.error('读取历史记录失败:', e);
+        }
+      },
+      historyLabel(h) {
+        const t = h.scannedAt ? new Date(h.scannedAt).toLocaleString('zh-CN', { hour12: false }) : h.file;
+        const s = h.summary || {};
+        return t + `（长文 ${s.longTextCount || 0} · 付费 ${s.paywallCount || 0} · gofile ${s.gofileCount || 0}）`;
+      },
+
+      // 设置
+      async loadSettings() {
+        try {
+          const res = await fetch('/api/settings');
+          if (!res.ok) return;
+          const s = await res.json();
+          Object.assign(this.settingsForm, s);
+        } catch (e) {
+          console.error('加载设置失败:', e);
+        }
+      },
+
+      async saveSettings() {
+        this.saveMsg = '';
+        try {
+          const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.settingsForm)
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          this.saveMsg = '设置已保存';
+          this.saveState = 'ok';
+        } catch (e) {
+          this.saveMsg = '保存失败: ' + e.message;
+          this.saveState = 'err';
+        }
+        setTimeout(() => { this.saveMsg = ''; }, 3000);
+      },
+
+      // 格式化
+      escapeHtml(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      },
+      csvEscape(v) {
+        const s = String(v == null ? '' : v);
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      },
+      downloadFile(filename, mime, content) {
+        const blob = new Blob([content], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      },
+      // 收集某分类的导出数据：列定义 + 行数据
+      collectExport(kind) {
+        const stamp = new Date().toISOString().slice(0, 10);
+        if (kind === 'long') {
+          return {
+            stamp, title: '长文帖',
+            cols: [
+              { label: '标题', key: 'title' },
+              { label: 'TID', key: 'tid' },
+              { label: '页', key: 'page' },
+              { label: '字数', key: 'charCount' },
+              { label: '付费状态', key: 'status' },
+              { label: '链接', key: 'url', link: 'url' }
+            ],
+            rows: this.longPosts.map(p => ({
+              title: p.title, tid: p.tid, page: p.page,
+              charCount: p.charCount, status: this.statusLabel(p.paywallStatus), url: p.url
+            }))
+          };
+        }
+        if (kind === 'paywall') {
+          return {
+            stamp, title: '付费帖',
+            cols: [
+              { label: '标题', key: 'title' },
+              { label: 'TID', key: 'tid' },
+              { label: '页', key: 'page' },
+              { label: '售价', key: 'price' },
+              { label: '付费状态', key: 'status' },
+              { label: '字数', key: 'charCount' },
+              { label: '链接', key: 'url', link: 'url' }
+            ],
+            rows: this.paywallPosts.map(p => ({
+              title: p.title, tid: p.tid, page: p.page,
+              price: this.priceText(p.price), status: this.statusLabel(p.paywallStatus),
+              charCount: p.charCount, url: p.url
+            }))
+          };
+        }
+        if (kind === 'gofile') {
+          return {
+            stamp, title: '含gofile链接帖',
+            cols: [
+              { label: '标题', key: 'title' },
+              { label: 'TID', key: 'tid' },
+              { label: '页', key: 'page' },
+              { label: 'gofile链接', key: 'gofileLinks', link: 'gofile' },
+              { label: '付费状态', key: 'status' },
+              { label: '链接', key: 'url', link: 'url' }
+            ],
+            rows: this.gofilePosts.map(p => ({
+              title: p.title, tid: p.tid, page: p.page,
+              gofileLinks: p.gofileLinks || [], status: this.statusLabel(p.paywallStatus), url: p.url
+            }))
+          };
+        }
+        return null;
+      },
+      exportCsv(kind) {
+        const e = this.collectExport(kind);
+        if (!e) return;
+        const rows = [
+          e.cols.map(c => c.label),
+          ...e.rows.map(row => e.cols.map(c => {
+            const v = row[c.key];
+            return Array.isArray(v) ? v.join(' | ') : v;
+          }))
+        ];
+        this.downloadFile(`${e.title}_${e.stamp}.csv`, 'text/csv;charset=utf-8;',
+          '﻿' + rows.map(r => r.map(this.csvEscape).join(',')).join('\r\n'));
+      },
+      exportHtml(kind) {
+        const e = this.collectExport(kind);
+        if (!e) return;
+        const head = e.cols.map(c => `<th>${this.escapeHtml(c.label)}</th>`).join('');
+        const body = e.rows.map(row => {
+          const cells = e.cols.map(c => {
+            const v = row[c.key];
+            if (c.link === 'gofile') {
+              const links = v.map(u => `<a href="${this.escapeHtml(u)}" target="_blank" rel="noopener">${this.escapeHtml(this.stripScheme(u))}</a>`).join('<br>');
+              return `<td>${links}</td>`;
+            }
+            if (c.link === 'url' && v) {
+              return `<td><a href="${this.escapeHtml(v)}" target="_blank" rel="noopener">${this.escapeHtml(this.stripScheme(v))}</a></td>`;
+            }
+            return `<td>${this.escapeHtml(v)}</td>`;
+          }).join('');
+          return `<tr>${cells}</tr>`;
+        }).join('');
+        const scanTime = this.data.scannedAt ? new Date(this.data.scannedAt).toLocaleString('zh-CN', { hour12: false }) : '';
+        const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${this.escapeHtml(e.title)} ${e.stamp}</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; padding: 32px 20px 64px; background: #f9f9f7; color: #0b0b0b; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .meta { color: #52514e; font-size: 13px; margin-bottom: 20px; }
+  .table-scroll { overflow-x: auto; border: 1px solid rgba(11,11,11,.10); border-radius: 12px; background: #fff; }
+  table { width: 100%; border-collapse: collapse; min-width: 560px; }
+  th { text-align: left; font-weight: 550; color: #52514e; font-size: 12px; padding: 10px 14px; border-bottom: 1px solid #c3c2b7; white-space: nowrap; }
+  td { padding: 9px 14px; border-bottom: 1px solid #e1e0d9; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  a { color: #2a78d6; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0d0d0d; color: #fff; }
+    .meta { color: #c3c2b7; }
+    .table-scroll { border-color: rgba(255,255,255,.10); background: #1a1a19; }
+    th { color: #c3c2b7; border-bottom-color: #383835; }
+    td { border-bottom-color: #2c2c2a; }
+    a { color: #3987e5; }
+  }
+</style>
+</head>
+<body>
+<h1>${this.escapeHtml(e.title)}</h1>
+<div class="meta">导出日期：${e.stamp} · 共 ${e.rows.length} 条${scanTime ? ' · 扫描时间：' + scanTime : ''}</div>
+<div class="table-scroll">
+<table>
+<thead><tr>${head}</tr></thead>
+<tbody>${body || '<tr><td colspan="' + e.cols.length + '" style="color:#898781">暂无数据</td></tr>'}</tbody>
+</table>
+</div>
+</body>
+</html>`;
+        this.downloadFile(`${e.title}_${e.stamp}.html`, 'text/html;charset=utf-8;', html);
+      },
+      statusLabel(s) { return STATUS[s] || '—'; },
+      statusClass(s) { return STATUS_CLASS[s] || 'st-none'; },
+      priceText(p) {
+        if (p == null || p === -1) return '未知';
+        return p === 0 ? '0 SP（免费）' : p + ' SP';
+      },
+      stripScheme(u) { return u.replace(/^https?:\/\//, ''); }
+    },
+
+    mounted() {
+      const saved = localStorage.getItem('sp-theme');
+      if (saved) {
+        const idx = THEMES.indexOf(saved);
+        if (idx >= 0) this.themeIdx = idx;
+      }
+      this.applyTheme();
+      this.loadSettings();
+      this.onHistoryChange();
+      this.loadHistory();
+    }
+  }).mount('#app');
+})();
+</script>
+</body>
+</html>
