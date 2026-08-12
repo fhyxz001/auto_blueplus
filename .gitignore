@@ -1,16 +1,11 @@
 # 依赖
 node_modules/
 
-# 构建产物
-dist/
-
 # 数据文件（含登录凭据，切勿提交到仓库）
 auth.json
 scanned_cache.json
 threads_analysis.json
-schedule.json
 external_links.json
-data/
 
 # 本地配置
 .claude/

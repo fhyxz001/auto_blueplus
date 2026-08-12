@@ -175,22 +175,7 @@ async function tryZeroSpPurchase(page) {
     }
 }
 
-// =========================================================
-// 启动模式控制：不自动启动扫描
-// =========================================================
-// 直接运行 `node southplus.js` 时不做任何扫描，提示通过网页控制面板手动触发。
-// 只有被 dashboard.js 以 SP_DASHBOARD=1 环境变量拉起时才执行扫描。
-if (process.env.SP_DASHBOARD !== '1') {
-    console.log('⚠️ 不要直接运行 southplus.js，扫描由网页控制面板手动触发。');
-    console.log('');
-    console.log('请按以下步骤操作：');
-    console.log('  1. 运行: node dashboard.js');
-    console.log('  2. 浏览器打开: http://localhost:3456');
-    console.log('  3. 在面板中点击「开始扫描」按钮。');
-    process.exit(0);
-}
-
-(async () => {
+async function runScan() {
     // 代理配置：SP_PROXY 形如 http://host:port 或 socks5://host:port，
     // 未设置则不走代理。可用 SP_PROXY_BYPASS 指定直连白名单，SP_PROXY_USERNAME/PASSWORD 提供认证。
     const proxyOpts = (() => {
@@ -203,18 +188,38 @@ if (process.env.SP_DASHBOARD !== '1') {
         return { proxy: p };
     })();
 
+    // 非无头运行：真实浏览器 + 真实 UA 才能维持 auth.json 登录会话。
+    // 窗口默认最小化并移出屏幕，不弹出干扰桌面。
+    const chromeArgs = ['--start-minimized', '--window-position=-32000,-32000'];
+    if (process.env.SP_NO_SANDBOX === '1') chromeArgs.push('--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu');
+
     const browser = await chromium.launch({
         headless: false,
         ...proxyOpts,
-        // Docker 中以 root 运行 Chromium 需要关闭沙箱；本地行为不受影响
-        ...(process.env.SP_NO_SANDBOX === '1' ? { args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] } : {})
+        args: chromeArgs
     });
 
+    // 会话与 UA 绑定：auth.json 是带头模式下捕获的，其 UA 为 "Chrome/主版本.0.0.0"。
+    // 显式声明与带头模式一致的 UA，即使以后切回无头模式登录也有效
+    const realUA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${parseInt(await browser.version())}.0.0.0 Safari/537.36`;
+
     const context = await browser.newContext({
-        storageState: './auth.json'
+        storageState: './auth.json',
+        userAgent: realUA
     });
 
     const page = await context.newPage();
+
+    // 最小化浏览器窗口（从屏幕外启动避免闪烁，再通过 CDP 真正最小化；失败不影响扫描）
+    try {
+        const pageSession = await context.newCDPSession(page);
+        const { targetInfo } = await pageSession.send('Target.getTargetInfo');
+        const cdp = await browser.newBrowserCDPSession();
+        const { windowId } = await cdp.send('Browser.getWindowForTarget', { targetId: targetInfo.targetId });
+        await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'minimized' } });
+    } catch (e) {
+        console.log('⚠️ 浏览器窗口最小化失败（不影响扫描）:', e.message);
+    }
 
     // =========================================================
     // 配置
@@ -486,5 +491,39 @@ if (process.env.SP_DASHBOARD !== '1') {
         console.error(error);
     } finally {
         await browser.close();
+    }
+}
+
+// =========================================================
+// 定时任务调度：每次扫描结束后，间隔 SCAN_INTERVAL_MS 再跑一次
+// 可通过环境变量 SP_INTERVAL_MS 自定义间隔（毫秒），默认 1 小时
+// =========================================================
+const SCAN_INTERVAL_MS = parseInt(process.env.SP_INTERVAL_MS) || 60 * 60 * 1000;
+
+(async () => {
+    console.log(`🕐 定时扫描已开启：每次扫描结束后，默认间隔 ${SCAN_INTERVAL_MS / 60000} 分钟再次扫描`);
+    console.log(`   如需调整间隔，设置环境变量 SP_INTERVAL_MS（单位毫秒），例如 SP_INTERVAL_MS=1800000 表示每 30 分钟`);
+
+    let isFirstRun = true;
+    for (;;) {
+        if (!isFirstRun) {
+            console.log('\n================================');
+            console.log('🕐 定时任务触发：开始新一轮扫描');
+            console.log('================================');
+        }
+        isFirstRun = false;
+
+        const startedAt = Date.now();
+        try {
+            await runScan();
+        } catch (e) {
+            console.error('❌ 扫描过程异常:', e.message);
+        }
+
+        const elapsedMin = ((Date.now() - startedAt) / 60000).toFixed(1);
+        const nextTime = new Date(Date.now() + SCAN_INTERVAL_MS).toLocaleString();
+        console.log(`⏱️ 本次扫描耗时 ${elapsedMin} 分钟，将在 ${SCAN_INTERVAL_MS / 60000} 分钟后（${nextTime}）进行下一次扫描。`);
+
+        await new Promise(resolve => setTimeout(resolve, SCAN_INTERVAL_MS));
     }
 })();
