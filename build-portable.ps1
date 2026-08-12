@@ -60,7 +60,7 @@ Write-Host "  Node.js version: $nodeVer" -ForegroundColor Green
 # ------ Copy project files ------
 Write-Host "[3/6] Copying project files ..." -ForegroundColor Yellow
 $AppFiles = @(
-    'server.js', 'southplus.js', 'settings.js',
+    'server.js', 'southplus.js',
     'index.html', 'vue.global.prod.js',
     'settings.json', 'auth.json',
     'package.json'
@@ -83,6 +83,17 @@ $historySrc = Join-Path $PSScriptRoot 'history'
 if (Test-Path $historySrc) {
     Copy-Item -Recurse $historySrc (Join-Path $PortableDir 'history')
     Write-Host "  OK history/" -ForegroundColor Gray
+}
+
+# Copy refactored source directories
+foreach ($dir in @('src', 'server')) {
+    $srcDir = Join-Path $PSScriptRoot $dir
+    if (Test-Path $srcDir) {
+        Copy-Item -Recurse $srcDir (Join-Path $PortableDir $dir)
+        Write-Host "  OK $dir/" -ForegroundColor Gray
+    } else {
+        Write-Host "  SKIP $dir/ (not found)" -ForegroundColor DarkYellow
+    }
 }
 
 # ------ Copy node_modules ------

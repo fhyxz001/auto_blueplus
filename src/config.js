@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const logger = require('./logger');
 
 const SETTINGS_FILE = path.join(process.cwd(), 'settings.json');
 
@@ -19,7 +20,7 @@ function loadSettings() {
             Object.assign(s, JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')));
         }
     } catch (e) {
-        console.error('⚠️ 读取 settings.json 失败，使用默认值:', e.message);
+        logger.error('⚠️ 读取 settings.json 失败，使用默认值:', e.message);
     }
 
     // 环境变量优先覆盖（兼容旧的 SP_* 变量）

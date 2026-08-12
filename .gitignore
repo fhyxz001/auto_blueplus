@@ -11,10 +11,14 @@ scanned_cache.json
 threads_analysis.json
 external_links.json
 
+# 扫描历史（运行时生成的数据，勿提交）
+history/
+
 # 本地配置
 .claude/
 
 # 系统与日志
+logs/
 *.log
 .DS_Store
 Thumbs.db
